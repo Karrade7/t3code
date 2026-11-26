@@ -40,6 +40,13 @@ import {
 import * as RpcAuthorization from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("allows roster reads separately from fleet mutations", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.fleetsList)).toBe(AuthOrchestrationReadScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.fleetsAssignments)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.fleetsMutate)).toBe(AuthOrchestrationOperateScope);
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });

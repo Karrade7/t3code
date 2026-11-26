@@ -194,6 +194,7 @@ import * as SqlitePersistence from "./persistence/Sqlite.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ProjectEnrichment from "./project/ProjectEnrichmentService.ts";
 import * as ProjectService from "./project/ProjectService.ts";
+import * as FleetService from "./fleet/FleetService.ts";
 import {
   layerWsRpc,
   resolveOpenDiscoveryForConfig,
@@ -831,6 +832,7 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
 
 // Build the production RPC layer; unrelated capabilities fail if this test calls them.
 const layerUnusedConfigRpcServices = Layer.mergeAll(
+  Layer.mock(FleetService.FleetService)({}),
   Layer.mock(DocumentText.DocumentText)({}),
   Layer.mock(ServerSecretStore.ServerSecretStore)({}),
   Layer.mock(SecretCheck.SecretCheck)({}),
@@ -2888,6 +2890,7 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
     Effect.provide(
       Layer.mergeAll(
         EventSink.layer.pipe(Layer.provideMerge(acpStores)),
+        Layer.mock(FleetService.FleetService)({}),
         Layer.mock(PreviewAutomationBroker.PreviewAutomationBroker)({}),
         Layer.mock(ServerBrowser.ServerBrowser)({}),
       ),

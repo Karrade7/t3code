@@ -109,6 +109,7 @@ import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { SidebarFolderDrop } from "./sidebar/SidebarFolderDrop";
+import { FleetProject } from "./fleet/FleetSidebar";
 import {
   pickableProjectGroups,
   selectProjectGroupingSettings,
@@ -929,6 +930,11 @@ function readRouteThreadKey(router: AnyRouter): string | null {
 export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReveal }) {
   const gt = useGT();
   const messages = useMessages();
+  const [fleetSidebar, setFleetSidebar] = useLocalStorage(
+    "t3code:fleet-sidebar:v1",
+    false,
+    Schema.Boolean,
+  );
   const {
     projects,
     serverConfigs,
@@ -3084,6 +3090,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ? shortcutLabelForCommand(keybindings, "chat.newLocal")
       : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  const showFleetView = fleetSidebar && !isSearchingThreads;
   return (
     <SidebarFolderDrop>
       <SidebarChromeHeader isElectron={isElectron} />
@@ -3092,6 +3099,24 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         className="min-h-full"
         fixedHeader={
           <SidebarGroup className="z-[1]">
+            <div className="flex gap-1 px-2 py-1" aria-label={gt("Sidebar view")}>
+              <Button
+                size="xs"
+                variant={fleetSidebar ? "ghost-muted" : "secondary"}
+                aria-pressed={!fleetSidebar}
+                onClick={() => setFleetSidebar(false)}
+              >
+                <T>Chats</T>
+              </Button>
+              <Button
+                size="xs"
+                variant={fleetSidebar ? "secondary" : "ghost-muted"}
+                aria-pressed={fleetSidebar}
+                onClick={() => setFleetSidebar(true)}
+              >
+                <T>Fleets</T>
+              </Button>
+            </div>
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
               projectScope={
@@ -3344,7 +3369,45 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         }
       >
         <SidebarGroup className="flex-1" role="presentation">
-          {isSearchingThreads ? (
+          {showFleetView
+            ? projects
+                .filter(
+                  (project) =>
+                    projectScopeKeys.length === 0 ||
+                    scopedProjectGroups.some((group) =>
+                      group.memberProjects.some(
+                        (member) =>
+                          member.environmentId === project.environmentId &&
+                          member.id === project.id,
+                      ),
+                    ),
+                )
+                .map((project) => (
+                  <FleetProject
+                    key={`${project.environmentId}:${project.id}`}
+                    project={project}
+                    threads={threads}
+                    activeThread={routeTarget?.kind === "server" ? routeTarget.threadRef : null}
+                    environmentLabel={environmentLabelById.get(project.environmentId) ?? null}
+                    supported={
+                      serverConfigs.get(project.environmentId)?.environment.capabilities
+                        .fleetRegistry === true
+                    }
+                    assignmentsSupported={
+                      serverConfigs.get(project.environmentId)?.environment.capabilities
+                        .fleetAssignments === true
+                    }
+                    onOpenThread={(ref) => {
+                      if (isMobile) setOpenMobile(false);
+                      void router.navigate({
+                        to: "/$environmentId/$threadId",
+                        params: buildThreadRouteParams(ref),
+                      });
+                    }}
+                  />
+                ))
+            : null}
+          {showFleetView ? null : isSearchingThreads ? (
             threadSearchResults.length > 0 ? (
               <DndContext
                 sensors={dndSensors}
@@ -3421,7 +3484,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             )
           ) : null}
           {/* A scope can hide every active thread; say so even when its project still has settled ones. */}
-          {!isSearchingThreads &&
+          {!showFleetView &&
+          !isSearchingThreads &&
           !hasProjectFolders &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length +
@@ -3473,7 +3537,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               )}
             </div>
           ) : null}
-          {!isSearchingThreads ? (
+          {!showFleetView && !isSearchingThreads ? (
             <DndContext
               sensors={dndSensors}
               autoScroll={isContextDrag ? false : SIDEBAR_AUTO_SCROLL}

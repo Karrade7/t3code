@@ -1,4 +1,10 @@
 import {
+  FleetAssignmentsInput,
+  FleetAssignmentsResult,
+  FleetId,
+  FleetMutation,
+  FleetSnapshot,
+  OrchestratorMcpClientRequestId,
   OrchestratorMcpCapabilitiesInput,
   OrchestratorMcpCapabilitiesResult,
   OrchestrationV2StopWorkflowInput,
@@ -42,6 +48,8 @@ import { McpSchema, Tool, Toolkit } from "effect/ai";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 
+import * as FleetService from "../../../fleet/FleetService.ts";
+import * as ThreadLaunchService from "../../../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
 import * as PeerLinkRequests from "../../../peer/PeerLinkRequests.ts";
@@ -71,6 +79,63 @@ const threadMetadataDependencies = [
   ThreadManagementService.ThreadManagementService,
   ThreadMetadataMcpService.ThreadMetadataMcpService,
 ];
+
+const fleetDependencies = [...dependencies, FleetService.FleetService];
+const FleetReadTool = Tool.make("t3_fleet_read", {
+  description:
+    "Read the saved fleet roster, including unattached and retired workers. Omit fleetId for this chat's fleet. Provider capabilities and native subagents are not this roster.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    fleetId: Schema.optional(FleetId),
+  }),
+  success: Schema.NullOr(FleetSnapshot),
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: fleetDependencies,
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false);
+
+const FleetAssignmentsTool = Tool.make("t3_fleet_assignments", {
+  description:
+    "Current local fleet leader: read recent assignments, exact worker runs, and result delivery. Use to recover interrupted work or report status. Defaults to 10 newest records; pass nextCursor as before for older records.",
+  parameters: FleetAssignmentsInput.mapFields(Struct.omit(["fleetId"])),
+  success: FleetAssignmentsResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: fleetDependencies,
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false);
+
+const FleetUpdateTool = Tool.make("t3_fleet_update", {
+  description:
+    "Current fleet leader only: change its saved roster or chat attachments. Read first; use expectedRevision and a unique commandId. Does not launch agents or send work. Retired workers receive no work.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    command: FleetMutation,
+  }),
+  success: FleetSnapshot.fields.fleet,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: fleetDependencies,
+}).annotate(Tool.Destructive, true);
+
+const FleetAssignTool = Tool.make("t3_fleet_assign", {
+  description:
+    "Current local fleet leader: queue a task for a named worker or role ID. Opens and attaches a chat if needed. For a new author chat pass worktreeBase to isolate its checkout. Completion appears in the leader chat. Set wakeLeader when ending your turn and ready to resume on completion. Reuse clientRequestId only to retry the same assignment.",
+  parameters: Schema.Struct({
+    worker: TrimmedNonEmptyString,
+    task: TrimmedNonEmptyString.check(Schema.isMaxLength(120_000)),
+    clientRequestId: OrchestratorMcpClientRequestId,
+    worktreeBase: Schema.optional(TrimmedNonEmptyString),
+    wakeLeader: Schema.optional(Schema.Boolean),
+  }),
+  success: OrchestratorMcpThreadSendResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: [...fleetDependencies, ThreadLaunchService.ThreadLaunchService],
+}).annotate(Tool.Destructive, true);
 
 const OrchestratorCapabilitiesTool = Tool.make("orchestrator_capabilities", {
   description:
@@ -363,6 +428,10 @@ const EnvironmentUnlinkTool = Tool.make("t3_environment_unlink", {
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenWhileLinksOff);
 
 export const OrchestratorToolkit = Toolkit.make(
+  FleetReadTool,
+  FleetAssignmentsTool,
+  FleetAssignTool,
+  FleetUpdateTool,
   OrchestratorCapabilitiesTool,
   DelegateTaskTool,
   TaskStatusTool,

@@ -311,6 +311,10 @@
       "types": "./src/state/previewTunnel.ts",
       "default": "./src/state/previewTunnel.ts"
     },
+    "./state/fleets": {
+      "types": "./src/state/fleets.ts",
+      "default": "./src/state/fleets.ts"
+    },
     "./state/peerLinks": {
       "types": "./src/state/peerLinks.ts",
       "default": "./src/state/peerLinks.ts"

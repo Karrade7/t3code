@@ -241,6 +241,7 @@ import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectEnrichmentService from "./project/ProjectEnrichmentService.ts";
 import * as ProjectService from "./project/ProjectService.ts";
+import * as FleetService from "./fleet/FleetService.ts";
 import { threadWorkspaceRoot } from "./project/threadWorkspaceRoot.ts";
 import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
 import * as ScratchThreadPromotion from "./project/ScratchThreadPromotion.ts";
@@ -1478,6 +1479,7 @@ export const layerWsRpc = (
       const applicationEvents = yield* OrchestrationEventStore.OrchestrationEventStore;
       const projectStore = yield* ProjectStore.ProjectStoreV2;
       const projectService = yield* ProjectService.ProjectService;
+      const fleetService = yield* FleetService.FleetService;
       const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
       const scratchThreadPromotion = yield* ScratchThreadPromotion.ScratchThreadPromotion;
       const eventLoopMonitor = yield* EventLoopMonitor.EventLoopMonitor;
@@ -3086,6 +3088,9 @@ export const layerWsRpc = (
                 (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
               ),
             ),
+        [WS_METHODS.fleetsList]: (input) => fleetService.list(input),
+        [WS_METHODS.fleetsAssignments]: (input) => fleetService.assignments(input),
+        [WS_METHODS.fleetsMutate]: (input) => fleetService.mutate(input),
         [WS_METHODS.projectsCreateFromThread]: (input) =>
           scratchThreadPromotion
             .promote(input)

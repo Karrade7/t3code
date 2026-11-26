@@ -221,6 +221,8 @@ export const make = Effect.gen(function* () {
     ...(databaseMigration === undefined ? {} : { databaseMigration }),
     capabilities: {
       repositoryIdentity: true,
+      fleetRegistry: true,
+      fleetAssignments: true,
       connectionProbe: true,
       attachmentUploads: true,
       accessTokenRenewal: true,

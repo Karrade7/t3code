@@ -2,6 +2,8 @@ import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import { OrchestratorToolkit } from "./tools.ts";
 import * as Effect from "effect/Effect";
 
+import { assignFleetWork } from "../../../fleet/FleetDispatch.ts";
+import * as FleetService from "../../../fleet/FleetService.ts";
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
 import * as PeerLinkRequests from "../../../peer/PeerLinkRequests.ts";
 import * as PeerLinks from "../../../peer/PeerLinks.ts";
@@ -13,6 +15,73 @@ import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ThreadMetadataMcpService from "../../ThreadMetadataMcpService.ts";
 
 const handlers = {
+  t3_fleet_assign: McpToolAccess.writes(assignFleetWork),
+  t3_fleet_read: McpToolAccess.reads(({ fleetId }) =>
+    Effect.gen(function* () {
+      const { scope } = yield* readCaller();
+      const service = yield* FleetService.FleetService;
+      return yield* service
+        .read({
+          ...(fleetId === undefined ? {} : { fleetId }),
+          ...(scope.thread === undefined ? {} : { threadId: scope.thread.threadId }),
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+          ),
+        );
+    }),
+  ),
+  t3_fleet_assignments: McpToolAccess.reads(({ before, limit = 10 }) =>
+    Effect.gen(function* () {
+      const { scope } = yield* readCaller();
+      const here = yield* McpInvocationContext.requireThreadScope(scope, "t3_fleet_assignments");
+      const service = yield* FleetService.FleetService;
+      const history = yield* service
+        .assignmentsAsLeader(
+          { environmentId: here.environmentId, threadId: here.thread.threadId },
+          { limit, ...(before === undefined ? {} : { before }) },
+        )
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({
+                code: "orchestration_error",
+                message: error.message,
+              }),
+          ),
+        );
+      if (history === null)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "Read assignment history from the current local fleet leader chat.",
+        });
+      return history;
+    }),
+  ),
+  t3_fleet_update: McpToolAccess.writes(({ command }) =>
+    Effect.gen(function* () {
+      const { scope } = yield* readCaller();
+      if (scope.thread === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "Fleet changes require the current leader's attached chat.",
+        });
+      const service = yield* FleetService.FleetService;
+      return yield* service
+        .mutateAsLeader(
+          { environmentId: scope.environmentId, threadId: scope.thread.threadId },
+          command,
+        )
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "invalid_request", message: error.message }),
+          ),
+        );
+    }),
+  ),
   orchestrator_capabilities: McpToolAccess.reads((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;

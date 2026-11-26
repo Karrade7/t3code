@@ -36,6 +36,8 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
+import * as FleetService from "../fleet/FleetService.ts";
+import { renderFleetContext } from "../fleet/FleetContext.ts";
 import * as ServerConfig from "../config.ts";
 import {
   CLAUDE_PROVIDER,
@@ -381,6 +383,7 @@ export const layer: Layer.Layer<
   | IdAllocator.IdAllocatorV2
   | FileSystem.FileSystem
   | Path.Path
+  | FleetService.FleetService
   | ServerConfig.ServerConfig
   | ServerSettings.ServerSettingsService
   | GitWorkflowService.GitWorkflowService
@@ -403,6 +406,7 @@ export const layer: Layer.Layer<
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const fleets = yield* FleetService.FleetService;
     const projects = yield* ProjectService.ProjectService;
     const setupScripts = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
     const providerAuth = yield* ProviderAuthService.ProviderAuthService;
@@ -1274,6 +1278,12 @@ export const layer: Layer.Layer<
         run.outputSchema === undefined || goalCommand || isProviderCommand(providerMessage)
           ? messageText
           : `${messageText}\n\n${outputInstructions(run.outputSchema)}`;
+      const fleetSnapshot =
+        isProviderCommand(providerMessage) || goalCommand
+          ? null
+          : yield* fleets.read({ threadId: projection.thread.id });
+      const fleetContext = fleetSnapshot === null ? "" : renderFleetContext(fleetSnapshot);
+
       // The provider turn marks cancellation work delivered; restart continuations use their own text or resume natively.
       const noteContinuation = isRestartNoteContinuation(
         run,
@@ -1472,7 +1482,10 @@ export const layer: Layer.Layer<
             return handoffBudget({
               tokenCap,
               modelContextWindow,
-              userText: restartNote === "" ? userText : `${restartNote}\n\n${userText}`,
+              userText: withInlineContext(
+                [restartNote, fleetContext].filter(Boolean).join("\n\n"),
+                userText,
+              ),
               attachments: providerMessage.attachments,
               providerThread: budgetProviderThread,
               nativeContextEstimate:
@@ -2147,6 +2160,7 @@ export const layer: Layer.Layer<
         retryHandoff.attachments.length > 0 ||
         sideChatHandoff !== undefined ||
         restartNote !== "" ||
+        fleetContext !== "" ||
         noteContinuation;
       // Pending context turns the resume into a prompted turn, which needs no native resume.
       if (
@@ -2377,7 +2391,7 @@ export const layer: Layer.Layer<
             ),
             ...(sideChatContext === "" || sideChatHandoff === undefined ? [] : [sideChatHandoff]),
           ];
-          const context = [delivery.context, sideChatContext, restartNote]
+          const context = [delivery.context, sideChatContext, restartNote, fleetContext]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;

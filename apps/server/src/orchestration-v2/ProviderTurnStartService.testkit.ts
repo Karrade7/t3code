@@ -17,6 +17,7 @@ import * as ProjectStore from "./ProjectStore.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FleetService from "../fleet/FleetService.ts";
 
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -33,6 +34,7 @@ export const layer = Layer.mergeAll(
     runForThread: () => Effect.succeed({ status: "no-script" }),
   }),
   layerNoTaskFolders,
+  Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) }),
   Layer.mock(GitWorkflow.GitWorkflowService)({
     pruneWorktrees: () => Effect.void,
     createWorktree: () => Effect.succeed({} as never),

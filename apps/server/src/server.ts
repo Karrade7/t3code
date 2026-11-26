@@ -170,6 +170,8 @@ import * as Observability from "./observability/Observability.ts";
 import * as HeapSnapshot from "./observability/HeapSnapshot.ts";
 import * as EventLoopMonitor from "./observability/EventLoopMonitor.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import * as FleetService from "./fleet/FleetService.ts";
+import * as FleetResultDelivery from "./fleet/FleetResultDelivery.ts";
 import * as DirectEndpoints from "./environment/DirectEndpoints.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
 import * as AuthHttp from "./auth/http.ts";
@@ -735,6 +737,7 @@ const layerServerRestart = Layer.effect(
 );
 
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
+  FleetResultDelivery.layer.pipe(Layer.provide(RuntimeLayer.layerEventSink)),
   AgentAwarenessRelay.layer,
   ProviderHostPathWatcher.layer.pipe(Layer.provide(layerDesktopTelemetryReceiver)),
   HeldHooksWaker.layer,
@@ -787,7 +790,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
   // One hub, which the feeders above and the workflow store inside the runtime publish to.
-  Layer.provideMerge(MilestoneHub.layer),
+  Layer.provideMerge(Layer.merge(MilestoneHub.layer, FleetService.layer)),
   Layer.provideMerge(Layer.merge(layerTaskFolders, LayoutCommandApprovalWrites.layer)),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),

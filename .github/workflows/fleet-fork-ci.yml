@@ -1,0 +1,35 @@
+name: Fleet checks
+
+on:
+  push:
+    branches:
+      - feat/fleet-registry
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fleet-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    if: github.repository == 'Karrade7/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install workspace dependencies
+        uses: ./.github/actions/setup-ci-deps
+      - name: Typecheck the server
+        working-directory: apps/server
+        run: vp run typecheck
+      - name: Test fleet state, tool access, and context delivery
+        run: >-
+          vp test run apps/server/src/fleet
+          apps/server/src/mcp/toolkits/core.test.ts
+          apps/server/src/orchestration-v2/ProviderTurnStartService.test.ts
+          apps/server/src/provider/AgentContextBudget.test.ts

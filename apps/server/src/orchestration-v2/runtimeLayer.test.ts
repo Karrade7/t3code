@@ -1,3 +1,4 @@
+import * as FleetService from "../fleet/FleetService.ts";
 import { PullRequestProviderError } from "@t3tools/source-control-core/server/PullRequestProvider";
 import { PullRequestUnavailableError, SourceControlProviderKind } from "@t3tools/contracts";
 import { limitRecoveryCommand } from "./UsageLimitRecoveryWorker.ts";
@@ -145,9 +146,10 @@ const layerGitWorkflowTest = Layer.merge(
   }),
   layerNoTaskFolders,
 );
-const layerProjectServiceTest = Layer.mock(ProjectService.ProjectService)({
-  getById: () => Effect.succeedNone,
-});
+const layerProjectServiceTest = Layer.merge(
+  Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) }),
+  Layer.mock(ProjectService.ProjectService)({ getById: () => Effect.succeedNone }),
+);
 
 const driver = ProviderDriverKind.make("codex");
 const orchestrationAdapter = {
@@ -355,7 +357,9 @@ const layerProjectionReplayTest = ProjectionReplay.layer.pipe(
 );
 
 const layerTest = Layer.mergeAll(
-  RuntimeLayer.layer,
+  RuntimeLayer.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
+  ),
   layerProjectionReplayTest,
   RuntimeLayer.layerEventSink,
   ProjectStore.layer,
@@ -375,7 +379,12 @@ const layerTest = Layer.mergeAll(
   Layer.provide(layerPlatformTest),
 );
 
-const layerLegacyImportTest = Layer.merge(RuntimeLayer.layer, layerProjectionReplayTest).pipe(
+const layerLegacyImportTest = Layer.merge(
+  RuntimeLayer.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
+  ),
+  layerProjectionReplayTest,
+).pipe(
   Layer.provide(McpSessionRegistryTestkit.layer),
   Layer.provide(McpProviderSessions.layer),
   Layer.provideMerge(SqlitePersistence.layerMemory),
@@ -474,7 +483,10 @@ const layerResourceCleanupTest = ResourceCleanupService.layer.pipe(
 );
 
 const layerProjectDeletionTest = Layer.mergeAll(
-  RuntimeLayer.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService)),
+  RuntimeLayer.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
+    Layer.provide(RuntimeLayer.layerProjectService),
+  ),
   RuntimeLayer.layerProjectService,
   RuntimeLayer.layerEventSink,
   ProjectionStore.layer,
@@ -1353,7 +1365,10 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
 
 const layerSharedApplicationDataPlaneTest = Layer.mergeAll(
   layerProjectionReplayTest,
-  RuntimeLayer.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService)),
+  RuntimeLayer.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
+    Layer.provide(RuntimeLayer.layerProjectService),
+  ),
   RuntimeLayer.layerProjectService,
   RuntimeLayer.layerEventSink,
   RuntimeLayer.layerEventInfrastructure,
@@ -14699,7 +14714,9 @@ const queueResumeDisabledInstanceProjectId = ProjectId.make(
 );
 
 const layerQueueResumeDisabledInstanceTest = Layer.mergeAll(
-  RuntimeLayer.layer,
+  RuntimeLayer.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
+  ),
   RuntimeLayer.layerEventSink,
   ProjectStore.layer,
   ProjectionStore.layer,

@@ -2,6 +2,7 @@ import {
   serializeAssistantCitation,
   expandAssistantCitationsForProvider,
 } from "@t3tools/shared/assistantCitations";
+import * as FleetService from "../fleet/FleetService.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it, vi } from "vite-plus/test";
@@ -175,6 +176,7 @@ function startWithMissingWorktree(
   );
   const listLocalBranchNames = vi.fn(() => Effect.succeed(["feature/restore"]));
   const layer = ProviderTurnStart.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
     Layer.provide(
       Layer.mergeAll(
         Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
@@ -476,6 +478,7 @@ it.each([
 
 function makeLocalCommandHarness(input: {
   readonly text: string;
+  readonly fleet?: import("@t3tools/contracts").FleetSnapshot;
   readonly manualContinuation?: boolean;
   readonly nativeResumeUnsupported?: boolean;
   readonly steeringRestart?: boolean;
@@ -1355,6 +1358,9 @@ function makeLocalCommandHarness(input: {
   );
   const recreatedBeforeDispatch = { pending: input.recreatedBeforeDispatch === true };
   const layer = ProviderTurnStart.layer.pipe(
+    Layer.provide(
+      Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(input.fleet ?? null) }),
+    ),
     Layer.provide(
       Layer.mergeAll(
         Layer.mock(ContextHandoffService.ContextHandoffServiceV2)({
@@ -3681,5 +3687,89 @@ effectIt.effect("rejects citation expansion before opening a provider session", 
       },
     ]);
     expect(harness.projection().messages[0]?.text).toBe(text);
+  }),
+);
+
+effectIt.effect("delivers the current durable fleet briefing on a resumed provider turn", () =>
+  Effect.gen(function* () {
+    const fleet = {
+      fleet: {
+        id: "fleet",
+        projectId: "project",
+        environmentId: "local",
+        name: "Testing fleet",
+        lifecycle: "active",
+        revision: 4,
+        coordinatorEpoch: 1,
+        roles: [
+          {
+            id: "lead",
+            name: "Testing leader",
+            kind: "coordinator",
+            remit: "Test responsibilities.",
+            lifecycle: "active",
+            currentGeneration: 1,
+            incarnations: [
+              {
+                generation: 1,
+                environmentId: "local",
+                threadId: "leader-chat",
+                attachedAt: "2026-01-01T00:00:00.000Z",
+                releasedAt: null,
+              },
+            ],
+          },
+          {
+            id: "worker",
+            name: "Test worker",
+            kind: "worker",
+            remit: "Test responsibilities.",
+            lifecycle: "active",
+            currentGeneration: null,
+            incarnations: [],
+          },
+          {
+            id: "retired",
+            name: "Retired test worker",
+            kind: "worker",
+            remit: "Test responsibilities.",
+            lifecycle: "retired",
+            currentGeneration: null,
+            incarnations: [],
+          },
+        ],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      callerRoleId: "lead",
+      isCurrentAttachment: true,
+      sessions: [
+        {
+          roleId: "lead",
+          state: "idle",
+        },
+        {
+          roleId: "worker",
+          state: "no session",
+        },
+        {
+          roleId: "retired",
+          state: "retired",
+        },
+      ],
+    } as unknown as import("@t3tools/contracts").FleetSnapshot;
+    const harness = makeLocalCommandHarness({
+      text: "Which workers do you lead?",
+      fleet,
+      previousNativeSession: true,
+      sideChat: { contextRun: "delivered" },
+    });
+    yield* harness.start;
+    expect(harness.startTurn).toHaveBeenCalled();
+    const text = harness.startTurn.mock.calls.at(-1)![0].message.text;
+    expect(text).toContain("T3 persistent fleet briefing");
+    expect(text).toContain("Retired test worker");
+    expect(text).toContain("no session");
+    expect(text).toContain("Which workers do you lead?");
   }),
 );
