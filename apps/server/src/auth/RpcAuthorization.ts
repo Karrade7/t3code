@@ -43,6 +43,8 @@ import { isProviderSignOutPrompt } from "../orchestration-v2/CommandPolicy.ts";
 type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 
 export const RPC_REQUIRED_SCOPES = {
+  [WS_METHODS.fleetsList]: AuthOrchestrationReadScope,
+  [WS_METHODS.fleetsAssignments]: AuthOrchestrationReadScope,
   ...CLIENT_GUARDED_RPC_SCOPES,
   [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.getWorkflowScript]: AuthOrchestrationReadScope,

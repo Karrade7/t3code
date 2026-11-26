@@ -151,6 +151,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Honors `enablePreviewTunnel`; hide the switch where absent, since the tunnel stays on there. */
   previewTunnelSetting: Schema.optionalKey(Schema.Boolean),
   threadPullRequests: Schema.optionalKey(Schema.Boolean),
+  fleetRegistry: Schema.optionalKey(Schema.Boolean),
+  fleetAssignments: Schema.optionalKey(Schema.Boolean),
   threadPullRequestWatch: Schema.optionalKey(Schema.Boolean),
   pullRequestStackActions: Schema.optionalKey(Schema.Boolean),
   serverSelfUpdate: Schema.optionalKey(ServerSelfUpdateCapability),

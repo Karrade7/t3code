@@ -1,3 +1,4 @@
+import * as FleetService from "../../apps/server/src/fleet/FleetService.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 /**
  * T3's real `t3_background_wait` handler and ThreadManagementService over a Claude session.
@@ -33,6 +34,7 @@ import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestr
 import * as CommandReceiptStore from "../../apps/server/src/orchestration-v2/CommandReceiptStore.ts";
 import * as Orchestrator from "../../apps/server/src/orchestration-v2/Orchestrator.ts";
 import * as ProviderSessionManager from "../../apps/server/src/orchestration-v2/ProviderSessionManager.ts";
+import * as ThreadLaunchService from "../../apps/server/src/orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../../apps/server/src/orchestration-v2/ThreadManagementService.ts";
 import * as PeerForwarding from "../../apps/server/src/peer/PeerForwarding.ts";
 import * as PeerLinkRequests from "../../apps/server/src/peer/PeerLinkRequests.ts";
@@ -100,8 +102,10 @@ export const makeBackgroundWait = Effect.fn("evaluateMcpToolUse.makeBackgroundWa
     McpHttpServer.toolkitRegistration(OrchestratorToolkit, OrchestratorHandlers.layer).pipe(
       Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
       Layer.provide(Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({})),
+      Layer.provide(Layer.mock(FleetService.FleetService)({})),
       Layer.provide(Layer.mock(ThreadMetadataMcpService.ThreadMetadataMcpService)({})),
       Layer.provide(threads),
+      Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
       Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
       Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
       Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),

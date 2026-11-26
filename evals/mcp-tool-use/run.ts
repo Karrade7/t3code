@@ -14,6 +14,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as PlatformNodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
+  FleetSnapshot,
   ComposerContextRecord,
   DeviceOperationError,
   DeviceSummary,
@@ -48,6 +49,7 @@ import {
   PullRequestState,
   ThreadId,
 } from "@t3tools/contracts";
+import { renderFleetContext } from "../../apps/server/src/fleet/FleetContext.ts";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import { THEME_GUIDE } from "@t3tools/shared/themeCss";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
@@ -357,6 +359,7 @@ export const McpToolUseCase = Schema.Struct({
     /** delegate_task `role` for a delegated child. T3 builds the child's first message from it. */
     delegateRole: Schema.optional(OrchestratorMcpTaskRole),
     context: Schema.optional(Schema.String),
+    fleet: Schema.optional(FleetSnapshot),
     priorTurns: Schema.optional(
       Schema.Array(
         Schema.Struct({
@@ -1215,6 +1218,7 @@ export const buildMessages = (sample: Sample) => {
       ? "You are a subagent started by the parent agent's Agent tool. Your final message goes to the parent agent, not to the user."
       : undefined,
     context,
+    testCase.setup.fleet === undefined ? undefined : renderFleetContext(testCase.setup.fleet),
   ];
   const reminders = base.reminders.toSpliced(base.gitStatusAt, 0, reminder(gitStatus(testCase)));
   push("user", ...reminders, ...notes.flatMap((note) => (note ? [reminder(note)] : [])));

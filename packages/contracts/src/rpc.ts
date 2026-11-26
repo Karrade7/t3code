@@ -489,8 +489,20 @@ import {
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
+import {
+  Fleet,
+  FleetAssignmentsInput,
+  FleetAssignmentsResult,
+  FleetError,
+  FleetListInput,
+  FleetListResult,
+  FleetMutation,
+} from "./fleet.ts";
 
 export const WS_METHODS = {
+  fleetsList: "fleets.list",
+  fleetsAssignments: "fleets.assignments",
+  fleetsMutate: "fleets.mutate",
   projectsListEntries: "projects.listEntries",
   projectsListIgnoredFiles: "projects.listIgnoredFiles",
   projectsReadFile: "projects.readFile",
@@ -2496,6 +2508,24 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
   { error: EnvironmentAuthorizationError },
 ) {}
 
+const WsFleetsListRpc = Rpc.make(WS_METHODS.fleetsList, {
+  payload: FleetListInput,
+  success: FleetListResult,
+  error: Schema.Union([FleetError, EnvironmentAuthorizationError]),
+});
+
+const WsFleetsAssignmentsRpc = Rpc.make(WS_METHODS.fleetsAssignments, {
+  payload: FleetAssignmentsInput,
+  success: FleetAssignmentsResult,
+  error: Schema.Union([FleetError, EnvironmentAuthorizationError]),
+});
+
+const WsFleetsMutateRpc = Rpc.make(WS_METHODS.fleetsMutate, {
+  payload: FleetMutation,
+  success: Fleet,
+  error: Schema.Union([FleetError, EnvironmentAuthorizationError]),
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsIssuesListRpc,
   WsIssuesDetailRpc,
@@ -2511,6 +2541,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssueTrackersListRpc,
   WsIssueTrackersConnectRpc,
   WsIssueTrackersBindProjectRpc,
+  WsFleetsListRpc,
+  WsFleetsAssignmentsRpc,
+  WsFleetsMutateRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

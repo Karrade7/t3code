@@ -2,6 +2,54 @@
 
 Use a separate thread for each task. Choose **New worktree** when a task needs its own Git branch and working directory; threads sharing a checkout share its branch, so T3 Code blocks branch switches while one is running.
 
+## Organize persistent workers with fleets
+
+On web and desktop, choose **Fleets** above the sidebar search. Each fleet's name
+is its leader chat. Its chevron expands the workers beneath it; ordinary project
+chats appear alongside fleet leaders without a separate section. **Chats** returns
+to the usual conversation list. Thread search works in either view.
+
+Use the **Manage fleets** icon beside the project and server label to search for or select a fleet from the dropdown. Enter
+a new name and choose **New** to create one. New is disabled when that name already
+exists. The manager shows one fleet at a time, with compact worker rows. Choose
+**Add worker…** beside the fleet controls to name a worker and describe its remit.
+You can also right-click the fleet name and choose **Add worker chat…**.
+
+Click a fleet leader or worker to open its conversation on the right. If it has no
+conversation, T3 creates an empty chat using the project's default model. Creating
+or opening it does not start an agent turn; send a message to begin work.
+
+Use a worker's **…** button for its remit, conversation settings and history.
+**Disconnect current chat** keeps that conversation in history and frees the role
+for a new one. Clicking the role again creates its next conversation. You can also
+choose an existing idle conversation with **Use selected chat**. Disconnect is
+available after active work and pending questions finish.
+
+Pausing prevents new conversations for that role or fleet; it does not stop existing
+chats. Disconnect current conversations before retiring a worker or fleet. Retirement
+keeps the history and is permanent for this version. These controls do not automatically
+assign work or start agents.
+
+Attached leader and worker chats receive their fleet identity and a roster briefing
+on ordinary turns. Ask the leader to refresh its fleet roster to include workers
+with no session and retired workers. It can read attached worker conversations and
+assign tasks by worker name. An active worker without a chat gets one on its first
+assignment. Ask the leader for a new worktree when an author needs a separate
+checkout. Later assignments reuse the attached chat and its checkout. Only the
+current leader can assign work or change the roster through the fleet tools.
+
+When a leader starts or queues a task in an attached worker chat on the same
+server, **Manage fleets** shows the assignment and its status. Open the worker
+chat to see the work, or open the result chat to find the completion notification.
+While work runs, the assignment shows its last activity and whether the worker
+needs an answer or approval. The leader can ask T3 to resume it when an assignment
+finishes, including when a worker fails or is interrupted. Ask the leader to look
+up the interrupted assignment before retrying work.
+
+An undelivered result follows the leader role. If you disconnect the leader chat
+before a result arrives, T3 holds it until the role has a new chat. A result
+that was already delivered stays in the chat that received it.
+
 ## Start a thread
 
 - **Web and desktop**: **New thread** opens the project picker when you have multiple open projects (unless the sidebar is filtered to one project). `Shift`-click to start in the current project. To reuse an existing worktree, choose **New thread in this worktree** from the branch toolbar.

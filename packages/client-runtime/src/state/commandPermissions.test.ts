@@ -70,6 +70,19 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("requires operate permission on the fleet's destination environment", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const fleetPermissions = createCommandPermissions(runtime, WS_METHODS.fleetsMutate);
+      registry.set(sessions(env), AsyncResult.success(grant(true)));
+      registry.set(sessions(other), AsyncResult.success(grant(false)));
+      expect(registry.get(fleetPermissions.permissionAtom(env))).toBe(true);
+      expect(registry.get(fleetPermissions.permissionAtom(other))).toBe(false);
+      expect((yield* fleetPermissions.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
+        "EnvironmentAuthorizationError",
+      );
+    }),
+  );
   it.effect("requires the destination read grant to refresh providers", () =>
     Effect.gen(function* () {
       const registry = yield* setup;

@@ -1,0 +1,38 @@
+name: Fleet checks
+
+on:
+  push:
+    branches:
+      - feat/fleet-registry
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fleet-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    if: github.repository == 'Karrade7/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the pushed commit
+        run: |
+          git init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --quiet --depth=1 origin "$GITHUB_SHA"
+          printf '/*\n!/.repos/\n' | git sparse-checkout set --no-cone --stdin
+          git checkout --quiet --detach FETCH_HEAD
+      - name: Install workspace dependencies
+        uses: ./.github/actions/setup-ci-deps
+      - name: Typecheck the server
+        working-directory: apps/server
+        run: vp run typecheck
+      - name: Test fleet state, tool access, and context delivery
+        run: >-
+          vp test run apps/server/src/fleet
+          apps/server/src/mcp/toolkits/core.test.ts
+          apps/server/src/orchestration-v2/ProviderTurnStartService.test.ts
+          apps/server/src/provider/AgentContextBudget.test.ts

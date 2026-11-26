@@ -1,5 +1,6 @@
 import {
   CommandId,
+  type MessageId,
   type OrchestrationV2Run,
   OrchestrationV2DomainEvent,
   type OrchestrationV2ProviderThread,
@@ -28,6 +29,11 @@ import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlError from "effect/sql/SqlError";
 
+import {
+  claimFleetResult,
+  claimFleetWake,
+  recordFleetAssignments,
+} from "../fleet/FleetAssignmentStore.ts";
 import { replayAndBufferProjectedLiveEvents } from "./LiveStreamBudget.ts";
 import type { UnsequencedProjectEvent } from "../persistence/OrchestrationEventStore.ts";
 import { projectStoredEventForWire } from "./WireProjection.ts";
@@ -109,6 +115,10 @@ export interface EventSinkV2Shape {
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | EventSinkV2Error, R>;
 
+  readonly writeFleetResult: (input: {
+    readonly assignmentMessageId: MessageId;
+    readonly event: Extract<OrchestrationV2DomainEvent, { readonly type: "turn-item.updated" }>;
+  }) => Effect.Effect<ReadonlyArray<OrchestrationV2StoredEvent>, EventSinkV2Error>;
   readonly write: (input: {
     /** Return no events if another thread owns this native session at commit time. */
     readonly unlessNativeThreadOwned?: Pick<
@@ -217,6 +227,7 @@ export interface EventSinkV2Shape {
     };
     /** Like writeWithEffects' updateDelegatedCompletionOnly, for this run's run.updated only. */
     readonly updateDelegatedCompletionOnlyRunId?: RunId;
+    readonly fleetWakeAssignment?: MessageId;
   }) => Effect.Effect<
     {
       readonly receipt: CommandReceiptStore.CommandReceiptV2;
@@ -453,6 +464,7 @@ const layerBase: Layer.Layer<
         yield* Effect.forEach(storedEvents, (stored) => projectionStore.apply(stored.event), {
           concurrency: 1,
         });
+        yield* recordFleetAssignments(sql, storedEvents);
         const sequence = storedEvents.at(-1)?.sequence;
         if (sequence !== undefined) {
           const batch = yield* CurrentProviderBatch;
@@ -487,6 +499,7 @@ const layerBase: Layer.Layer<
 
     const writeEffect = Effect.fn("orchestrationV2.EventSink.write")(function* (
       input: Parameters<EventSinkV2Shape["writeWithEffects"]>[0],
+      fleetResult?: Parameters<EventSinkV2Shape["writeFleetResult"]>[0],
     ) {
       yield* Effect.annotateCurrentSpan({
         "orchestration_v2.command_id": input.commandId ?? null,
@@ -499,6 +512,15 @@ const layerBase: Layer.Layer<
       const { committed } = yield* commitThenPublish(
         projectedThreadIds(input.events),
         Effect.gen(function* () {
+          if (
+            fleetResult !== undefined &&
+            !(yield* claimFleetResult(sql, {
+              messageId: fleetResult.assignmentMessageId,
+              threadId: fleetResult.event.threadId,
+              deliveredAt: DateTime.formatIso(fleetResult.event.occurredAt),
+            }))
+          )
+            return { committed: [], outcomes: [] };
           // Check ownership in the same transaction that claims the native session.
           const imported = input.unlessNativeThreadOwned;
           if (imported?.nativeThreadRef != null) {
@@ -837,6 +859,20 @@ const layerBase: Layer.Layer<
             }
           }
 
+          if (
+            input.fleetWakeAssignment !== undefined &&
+            !(yield* claimFleetWake(sql, {
+              messageId: input.fleetWakeAssignment,
+              threadId: input.threadId,
+              at: DateTime.formatIso(input.acceptedAt),
+            }))
+          ) {
+            return yield* new EventSinkWriteError({
+              commandId: input.commandId,
+              eventCount: input.events.length,
+              cause: "Fleet wake is no longer pending for this leader.",
+            });
+          }
           const runId = input.updateDelegatedCompletionOnlyRunId;
           const normalized = yield* normalizeEvents(
             runId === undefined
@@ -1184,6 +1220,10 @@ const layerBase: Layer.Layer<
     return EventSinkV2.of({
       consumeProviderEvents: coordinator.consume,
       withProviderBatch,
+      writeFleetResult: (input) =>
+        writeEffect({ events: [input.event], effects: [] }, input).pipe(
+          Effect.mapError((cause) => new EventSinkWriteError({ eventCount: 1, cause })),
+        ),
       write: (input) =>
         writeEffect({ ...input, effects: [] }).pipe(
           Effect.mapError(

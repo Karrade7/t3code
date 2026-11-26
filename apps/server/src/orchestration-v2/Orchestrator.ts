@@ -438,6 +438,10 @@ export interface OrchestratorV2Shape {
   readonly dispatch: (
     command: OrchestrationV2ServerCommand,
   ) => Effect.Effect<OrchestratorV2DispatchResult, OrchestratorV2Error>;
+  readonly dispatchFleetWake: (
+    command: Extract<OrchestrationV2Command, { type: "message.dispatch" }>,
+    assignmentMessageId: MessageId,
+  ) => Effect.Effect<OrchestratorV2DispatchResult, OrchestratorV2Error>;
   readonly autoArmLimitRecovery: (input: {
     readonly commandId: CommandId;
     readonly threadId: ThreadId;
@@ -16577,6 +16581,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     command: OrchestrationV2ServerCommand,
     sideChatIds: ReadonlyArray<ThreadId> = [],
     cancelledTask?: OrchestrationV2Subagent,
+    fleetWakeAssignment?: MessageId,
   ): Effect.fn.Return<OrchestratorV2DispatchResult, OrchestratorV2Error> {
     yield* Effect.annotateCurrentSpan({
       "orchestration_v2.command_id": command.commandId,
@@ -16655,6 +16660,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       ),
       Effect.catch((cause) =>
         Effect.gen(function* () {
+          // A fleet wake can retry after the user changes the leader or its permissions.
+          if (fleetWakeAssignment !== undefined) return yield* cause;
           // Refusals depend on modes the user can change; a recorded rejection would block the retry.
           if (
             cause._tag === "OrchestratorThreadAboveModeLimitError" ||
@@ -16774,6 +16781,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 }).pipe(mapDispatchError(command)),
               ],
         effects: plan.effects,
+        ...(fleetWakeAssignment === undefined ? {} : { fleetWakeAssignment }),
         ...(plan.cancelUnsettledEffects === undefined
           ? {}
           : { cancelUnsettledEffects: plan.cancelUnsettledEffects }),
@@ -16865,7 +16873,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     );
 
   // dispatchWithReceiptEffect owns the dispatch span; this wrapper selects the thread locks.
-  const dispatchWithReceipt = Effect.fnUntraced(function* (command: OrchestrationV2ServerCommand) {
+  const dispatchWithReceipt = Effect.fnUntraced(function* (
+    command: OrchestrationV2ServerCommand,
+    fleetWakeAssignment?: MessageId,
+  ) {
     // The latest stable run is the one with a checkpoint. Wait for a just-completed run's capture,
     // outside the locks its commit takes, so a fork right after a turn starts from that turn.
     if (
@@ -16876,7 +16887,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     }
     const dispatch = threadDispatch.withLock(
       commandThreadId(command),
-      dispatchWithReceiptEffect(command),
+      dispatchWithReceiptEffect(command, [], undefined, fleetWakeAssignment),
     );
     // A fork holds its source's lock, so a source deletion and its fork never interleave. A
     // parent's lock comes before its side chats' locks. A side chat fork from a side chat or a
@@ -17469,6 +17480,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       return effectOutbox.awaitSettled(`effect:restart-continuation:${run.id}`).pipe(Effect.ignore);
     }),
     dispatch: dispatchWithReceipt,
+    dispatchFleetWake: dispatchWithReceipt,
     autoArmLimitRecovery: Effect.fn("OrchestratorV2.autoArmLimitRecovery")(function (input) {
       return threadDispatch.withLock(
         input.threadId,

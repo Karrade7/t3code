@@ -1,3 +1,4 @@
+import * as FleetService from "../../fleet/FleetService.ts";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
@@ -479,6 +480,7 @@ export function layerWithRegistry<Error>(
     ),
   );
   const layerProviderTurnStartServiceProvided = ProviderTurnStartService.layer.pipe(
+    Layer.provide(Layer.mock(FleetService.FleetService)({ read: () => Effect.succeed(null) })),
     Layer.provide(
       Layer.mergeAll(
         layerContextHandoffServiceProvided,
